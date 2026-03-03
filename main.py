@@ -23,7 +23,7 @@ from .core.config_manager import ConfigManager
     "astrbot_plugin_media_parser",
     "drdon1234",
     "聚合解析流媒体平台链接，转换为媒体直链发送",
-    "4.3.2"
+    "4.3.3"
 )
 class VideoParserPlugin(Star):
 
