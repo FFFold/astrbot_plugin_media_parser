@@ -1,3 +1,5 @@
+import os
+import tempfile
 from typing import List
 
 from .logger import logger
@@ -74,10 +76,15 @@ class ConfigManager:
         self.large_video_threshold_mb = large_video_threshold_mb
         
         download_settings = self._config.get("download_settings", {})
-        self.cache_dir = download_settings.get(
-            "cache_dir",
-            "/app/sharedFolder/video_parser/cache"
-        )
+        configured_cache_dir = download_settings.get("cache_dir", "").strip()
+        
+        if not configured_cache_dir or configured_cache_dir == "/app/sharedFolder/video_parser/cache":
+            if os.path.exists('/.dockerenv'):
+                self.cache_dir = "/app/sharedFolder/video_parser/cache"
+            else:
+                self.cache_dir = os.path.join(tempfile.gettempdir(), "astrbot_media_parser_cache")
+        else:
+            self.cache_dir = configured_cache_dir
         self.pre_download_all_media = download_settings.get(
             "pre_download_all_media",
             False
