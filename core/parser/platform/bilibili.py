@@ -97,7 +97,8 @@ class BilibiliParser(BaseVideoParser):
         self._default_headers = {
             "User-Agent": UA,
             "Referer": "https://www.bilibili.com",
-            "Origin": "https://www.bilibili.com"
+            "Origin": "https://www.bilibili.com",
+            "Accept-Encoding": "gzip, deflate",
         }
 
     def get_auth_runtime(self) -> BilibiliAuthRuntime:
@@ -440,7 +441,8 @@ class BilibiliParser(BaseVideoParser):
         if urlparse(url).netloc.lower() == B23_HOST:
             headers = {
                 "User-Agent": UA,
-                "Referer": "https://www.bilibili.com"
+                "Referer": "https://www.bilibili.com",
+                "Accept-Encoding": "gzip, deflate",
             }
             try:
                 async with session.get(

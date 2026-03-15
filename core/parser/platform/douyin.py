@@ -26,7 +26,8 @@ class DouyinParser(BaseVideoParser):
             ),
             'Referer': (
                 'https://www.douyin.com/?is_from_mobile_home=1&recommend=1'
-            )
+            ),
+            'Accept-Encoding': 'gzip, deflate',
         }
         self.semaphore = asyncio.Semaphore(Config.PARSER_MAX_CONCURRENT)
 

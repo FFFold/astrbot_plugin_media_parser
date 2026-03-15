@@ -170,6 +170,7 @@ class WeiboParser(BaseVideoParser):
         headers = {
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'content-type': 'application/x-www-form-urlencoded',
+            'accept-encoding': 'gzip, deflate',
         }
 
         data = {'cb': 'visitor_gray_callback'}
@@ -391,6 +392,7 @@ class WeiboParser(BaseVideoParser):
             'referer': url,
             'cookie': cookies,
             'accept': 'application/json, text/plain, */*',
+            'accept-encoding': 'gzip, deflate',
             'x-requested-with': 'XMLHttpRequest',
             'sec-fetch-site': 'same-origin',
             'sec-fetch-mode': 'cors',
@@ -462,6 +464,7 @@ class WeiboParser(BaseVideoParser):
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0',
             'referer': 'https://visitor.passport.weibo.cn/',
             'cookie': cookies,
+            'accept-encoding': 'gzip, deflate',
         }
 
         async with session.get(detail_url, headers=headers) as response:
@@ -534,6 +537,7 @@ class WeiboParser(BaseVideoParser):
             'referer': referer_url,
             'cookie': cookies,
             'content-type': 'application/x-www-form-urlencoded',
+            'accept-encoding': 'gzip, deflate',
         }
 
         payload = {

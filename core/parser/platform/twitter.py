@@ -42,6 +42,7 @@ class TwitterParser(BaseVideoParser):
                 'Chrome/120.0.0.0 Safari/537.36'
             ),
             'Accept': 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
         }
     
     def can_parse(self, url: str) -> bool:

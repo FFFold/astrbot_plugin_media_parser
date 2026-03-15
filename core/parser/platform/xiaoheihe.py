@@ -40,7 +40,8 @@ class XiaoheiheParser(BaseVideoParser):
         self._default_headers = {
             "User-Agent": UA,
             "Referer": "https://www.xiaoheihe.cn/",
-            "Accept-Language": "zh-CN,zh;q=0.9"
+            "Accept-Language": "zh-CN,zh;q=0.9",
+            "Accept-Encoding": "gzip, deflate",
         }
     
     def _add_m3u8_prefix_to_urls(self, urls: List[str]) -> List[str]:

@@ -126,6 +126,7 @@ def build_request_headers(
             'User-Agent': effective_user_agent,
             'Accept': '*/*',
             'Accept-Language': default_accept_language,
+            'Accept-Encoding': 'gzip, deflate',
         }
     else:
         headers = {
@@ -135,6 +136,7 @@ def build_request_headers(
                 'image/*,*/*;q=0.8'
             ),
             'Accept-Language': default_accept_language,
+            'Accept-Encoding': 'gzip, deflate',
         }
     
     if referer_url:
