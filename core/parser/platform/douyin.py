@@ -359,7 +359,6 @@ class DouyinParser(BaseVideoParser):
             )
             video_headers = build_request_headers(
                 is_video=True,
-                referer=referer,
                 user_agent=user_agent
             )
 
