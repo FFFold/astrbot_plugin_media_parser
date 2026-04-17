@@ -306,8 +306,7 @@ async def download_media_from_url(
                     response, media_url, is_video=is_video, allow_read_content=True
                 )
                 if not is_valid:
-                    last_exception = RuntimeError("validate_media_response returned False")
-                    continue
+                    raise aiohttp.ClientError("validate_media_response returned False")
 
                 content_type = response.headers.get('Content-Type', '')
                 size_mb = extract_size_from_headers(response)
@@ -323,8 +322,7 @@ async def download_media_from_url(
                             pass
                     return os.path.normpath(file_path), size_mb
                 cleanup_file(file_path)
-                last_exception = RuntimeError("download_media_stream returned False")
-                continue
+                raise aiohttp.ClientError("download_media_stream returned False")
         except aiohttp.ClientResponseError as e:
             if e.status < 500:
                 last_exception = e
