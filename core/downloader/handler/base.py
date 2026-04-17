@@ -327,7 +327,8 @@ async def download_media_from_url(
                 continue
         except aiohttp.ClientResponseError as e:
             if e.status < 500:
-                raise RuntimeError(f"HTTP {e.status} {e.message}")
+                last_exception = e
+                break
             last_exception = e
         except (aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ServerTimeoutError) as e:
             last_exception = e
@@ -343,3 +344,6 @@ async def download_media_from_url(
             logger.warning(f"下载媒体失败: {media_url}, 错误: {error_msg}（已重试{max_retries}次）")
             return None, None
 
+    error_msg = str(last_exception) if last_exception else "未知错误"
+    logger.warning(f"下载媒体失败: {media_url}, 错误: {error_msg}")
+    return None, None
