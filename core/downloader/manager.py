@@ -491,7 +491,8 @@ class DownloadManager:
                     'file_path': None,
                     'size_mb': None,
                     'success': False,
-                    'index': index
+                    'index': index,
+                    'error': last_error or '所有候选URL均下载失败'
                 }
             except Exception as e:
                 url_list = item.get('url_list', [])
