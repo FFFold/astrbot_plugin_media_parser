@@ -441,6 +441,29 @@ class DownloadManager:
 
         async def download_one(item: Dict[str, Any]) -> Dict[str, Any]:
             """下载单条媒体并返回包含本地路径的处理结果。"""
+            def build_error_message(url: str, error_detail: Any = None, is_exception: bool = False) -> str:
+                prefix = "候选URL下载异常" if is_exception else "候选URL下载失败"
+                if error_detail is not None:
+                    return f"{prefix}: {url}, 详情: {error_detail}"
+                return f"{prefix}: {url}"
+
+            def normalize_download_failure(result: Any) -> Tuple[Optional[str], bool]:
+                if not isinstance(result, dict):
+                    return None, False
+
+                status_code = result.get('status_code')
+                retryable = result.get('retryable', False)
+                error_detail = (
+                    result.get('error')
+                    or result.get('reason')
+                    or result.get('status')
+                    or result.get('status_code')
+                    or result.get('message')
+                    or result.get('detail')
+                )
+                should_retry = retryable or status_code == 429 or (status_code is not None and status_code >= 500)
+                return error_detail, should_retry
+
             try:
                 url_list = item.get('url_list', [])
                 media_id = item.get('media_id', 'media')
@@ -477,11 +500,11 @@ class DownloadManager:
                                     proxy=item_proxy
                                 )
                             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                                last_error = f"候选URL下载异常: {url}, 详情: {e!r}"
+                                last_error = build_error_message(url, e!r, is_exception=True)
                                 should_retry = True
                                 continue
                             except Exception as e:
-                                last_error = f"候选URL下载异常: {url}, 详情: {e!r}"
+                                last_error = build_error_message(url, e!r, is_exception=True)
                                 continue
 
                             if result and result.get('file_path'):
@@ -493,25 +516,11 @@ class DownloadManager:
                                     'index': index
                                 }
 
-                            error_detail = None
-                            if isinstance(result, dict):
-                                status_code = result.get('status_code')
-                                retryable = result.get('retryable', False)
-                                error_detail = (
-                                    result.get('error')
-                                    or result.get('reason')
-                                    or result.get('status')
-                                    or result.get('status_code')
-                                    or result.get('message')
-                                    or result.get('detail')
-                                )
-                                if retryable or status_code == 429 or (status_code is not None and status_code >= 500):
-                                    should_retry = True
+                            error_detail, retry_current_item = normalize_download_failure(result)
+                            if retry_current_item:
+                                should_retry = True
 
-                            if error_detail:
-                                last_error = f"候选URL下载失败: {url}, 详情: {error_detail}"
-                            else:
-                                last_error = f"候选URL下载失败: {url}"
+                            last_error = build_error_message(url, error_detail)
 
                     if attempt < max_retries and should_retry:
                         delay = retry_delay * (2 ** attempt)
