@@ -318,7 +318,3 @@ async def download_media_from_url(
     except Exception as e:
         logger.warning(f"下载媒体失败: {media_url}, 错误: {e}")
         return None, None
-
-    error_msg = str(last_exception) if last_exception else "未知错误"
-    logger.warning(f"下载媒体失败: {media_url}, 错误: {error_msg}")
-    return None, None
