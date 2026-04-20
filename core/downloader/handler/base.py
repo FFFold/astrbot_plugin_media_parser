@@ -299,7 +299,7 @@ async def download_media_from_url(
                 response, media_url, is_video=is_video, allow_read_content=True
             )
             if not is_valid:
-                raise aiohttp.ClientError("validate_media_response returned False")
+                raise aiohttp.ClientError(f"validate_media_response returned False: {media_url}")
             
             content_type = response.headers.get('Content-Type', '')
             size_mb = extract_size_from_headers(response)
@@ -315,7 +315,7 @@ async def download_media_from_url(
                         pass
                 return os.path.normpath(file_path), size_mb
             cleanup_file(file_path)
-            raise aiohttp.ClientError("download_media_stream returned False")
+            raise aiohttp.ClientError(f"download_media_stream returned False: {media_url}")
     except aiohttp.ClientResponseError:
         raise
     except (aiohttp.ClientError, asyncio.TimeoutError):
