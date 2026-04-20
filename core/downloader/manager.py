@@ -455,16 +455,21 @@ class DownloadManager:
                 for attempt in range(max_retries + 1):
                     async with semaphore:
                         for url in url_list:
-                            result = await download_media(
-                                session,
-                                url,
-                                media_type=None,
-                                cache_dir=cache_dir,
-                                media_id=media_id,
-                                index=index,
-                                headers=item_headers,
-                                proxy=item_proxy
-                            )
+                            try:
+                                result = await download_media(
+                                    session,
+                                    url,
+                                    media_type=None,
+                                    cache_dir=cache_dir,
+                                    media_id=media_id,
+                                    index=index,
+                                    headers=item_headers,
+                                    proxy=item_proxy
+                                )
+                            except Exception as e:
+                                last_error = f"候选URL下载异常: {url}, 详情: {e!r}"
+                                continue
+
                             if result and result.get('file_path'):
                                 return {
                                     'url': url,
@@ -473,7 +478,22 @@ class DownloadManager:
                                     'success': True,
                                     'index': index
                                 }
-                            last_error = f"候选URL下载失败: {url}"
+
+                            error_detail = None
+                            if isinstance(result, dict):
+                                error_detail = (
+                                    result.get('error')
+                                    or result.get('reason')
+                                    or result.get('status')
+                                    or result.get('status_code')
+                                    or result.get('message')
+                                    or result.get('detail')
+                                )
+
+                            if error_detail:
+                                last_error = f"候选URL下载失败: {url}, 详情: {error_detail}"
+                            else:
+                                last_error = f"候选URL下载失败: {url}"
 
                     if attempt < max_retries:
                         delay = retry_delay * (2 ** attempt)
@@ -501,6 +521,7 @@ class DownloadManager:
                 return {
                     'url': url_list[0] if url_list else None,
                     'file_path': None,
+                    'size_mb': None,
                     'success': False,
                     'index': index,
                     'error': str(e)
