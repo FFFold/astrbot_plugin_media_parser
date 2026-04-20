@@ -265,9 +265,7 @@ async def download_media_from_url(
     file_path_generator: Callable[[str, str], str],
     is_video: bool = True,
     headers: dict = None,
-    proxy: str = None,
-    max_retries: int = 3,
-    retry_delay: float = 1.0
+    proxy: str = None
 ) -> Tuple[Optional[str], Optional[float]]:
     """通用媒体下载函数，封装公共的下载逻辑
 
@@ -278,69 +276,48 @@ async def download_media_from_url(
         is_video: 是否为视频（True为视频，False为图片）
         headers: 请求头字典
         proxy: 代理地址（可选）
-        max_retries: 最大重试次数，默认3次
-        retry_delay: 重试延迟（秒），默认1秒，使用指数退避
 
     Returns:
         (file_path, size_mb) 元组，失败返回 (None, None)
     """
-    last_exception = None
-
-    for attempt in range(max_retries + 1):
-        try:
-            request_headers = headers or {}
-
-            timeout = aiohttp.ClientTimeout(
-                total=Config.VIDEO_DOWNLOAD_TIMEOUT if is_video else Config.IMAGE_DOWNLOAD_TIMEOUT
+    try:
+        request_headers = headers or {}
+        
+        timeout = aiohttp.ClientTimeout(
+            total=Config.VIDEO_DOWNLOAD_TIMEOUT if is_video else Config.IMAGE_DOWNLOAD_TIMEOUT
+        )
+        
+        async with session.get(
+            media_url,
+            headers=request_headers,
+            timeout=timeout,
+            proxy=proxy
+        ) as response:
+            response.raise_for_status()
+            
+            is_valid, content_preview = await validate_media_response(
+                response, media_url, is_video=is_video, allow_read_content=True
             )
-
-            async with session.get(
-                media_url,
-                headers=request_headers,
-                timeout=timeout,
-                proxy=proxy
-            ) as response:
-                response.raise_for_status()
-
-                is_valid, content_preview = await validate_media_response(
-                    response, media_url, is_video=is_video, allow_read_content=True
-                )
-                if not is_valid:
-                    raise aiohttp.ClientError("validate_media_response returned False")
-
-                content_type = response.headers.get('Content-Type', '')
-                size_mb = extract_size_from_headers(response)
-
-                file_path = file_path_generator(content_type, media_url)
-
-                if await download_media_stream(response, file_path, content_preview, is_video=is_video):
-                    if size_mb is None:
-                        try:
-                            file_size_bytes = os.path.getsize(file_path)
-                            size_mb = file_size_bytes / (1024 * 1024)
-                        except Exception:
-                            pass
-                    return os.path.normpath(file_path), size_mb
-                cleanup_file(file_path)
-                raise aiohttp.ClientError("download_media_stream returned False")
-        except aiohttp.ClientResponseError as e:
-            if e.status < 500:
-                last_exception = e
-                break
-            last_exception = e
-        except (aiohttp.ClientError, asyncio.TimeoutError, aiohttp.ServerTimeoutError) as e:
-            last_exception = e
-        except Exception as e:
-            raise RuntimeError(str(e))
-
-        if attempt < max_retries:
-            delay = retry_delay * (2 ** attempt)
-            logger.debug(f"下载媒体重试: {media_url}, 尝试 {attempt + 1}/{max_retries + 1}, 等待 {delay}s")
-            await asyncio.sleep(delay)
-        else:
-            error_msg = str(last_exception) if last_exception else "未知错误"
-            logger.warning(f"下载媒体失败: {media_url}, 错误: {error_msg}（已重试{max_retries}次）")
+            if not is_valid:
+                return None, None
+            
+            content_type = response.headers.get('Content-Type', '')
+            size_mb = extract_size_from_headers(response)
+            
+            file_path = file_path_generator(content_type, media_url)
+            
+            if await download_media_stream(response, file_path, content_preview, is_video=is_video):
+                if size_mb is None:
+                    try:
+                        file_size_bytes = os.path.getsize(file_path)
+                        size_mb = file_size_bytes / (1024 * 1024)
+                    except Exception:
+                        pass
+                return os.path.normpath(file_path), size_mb
             return None, None
+    except Exception as e:
+        logger.warning(f"下载媒体失败: {media_url}, 错误: {e}")
+        return None, None
 
     error_msg = str(last_exception) if last_exception else "未知错误"
     logger.warning(f"下载媒体失败: {media_url}, 错误: {error_msg}")
