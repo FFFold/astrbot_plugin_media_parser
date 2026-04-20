@@ -79,16 +79,23 @@ class DownloadManager:
         proxy = proxy_url if (use_image_proxy and proxy_url) else None
         
         for url in url_list:
-            result = await download_media(
-                session,
-                url,
-                media_type=None,
-                cache_dir=None,
-                media_id='image',
-                index=img_idx,
-                headers=headers,
-                proxy=proxy
-            )
+            try:
+                result = await download_media(
+                    session,
+                    url,
+                    media_type=None,
+                    cache_dir=None,
+                    media_id='image',
+                    index=img_idx,
+                    headers=headers,
+                    proxy=proxy
+                )
+            except aiohttp.ClientResponseError as e:
+                logger.debug(f"图片候选URL下载失败: {url}, HTTP {e.status} {e.message}")
+                continue
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                logger.debug(f"图片候选URL下载异常: {url}, 错误: {e}")
+                continue
             if result and result.get('file_path'):
                 return result.get('file_path')
         
@@ -442,29 +449,41 @@ class DownloadManager:
                 item_proxy = item.get('proxy')
                 max_retries = 3
                 retry_delay = 1.0
+                first_url = url_list[0] if isinstance(url_list, list) and url_list else None
 
                 if not url_list or not isinstance(url_list, list):
                     return {
-                        'url': url_list[0] if url_list else None,
+                        'url': first_url,
                         'file_path': None,
+                        'size_mb': None,
                         'success': False,
                         'index': index
                     }
 
                 last_error = None
                 for attempt in range(max_retries + 1):
+                    should_retry = False
                     async with semaphore:
                         for url in url_list:
-                            result = await download_media(
-                                session,
-                                url,
-                                media_type=None,
-                                cache_dir=cache_dir,
-                                media_id=media_id,
-                                index=index,
-                                headers=item_headers,
-                                proxy=item_proxy
-                            )
+                            try:
+                                result = await download_media(
+                                    session,
+                                    url,
+                                    media_type=None,
+                                    cache_dir=cache_dir,
+                                    media_id=media_id,
+                                    index=index,
+                                    headers=item_headers,
+                                    proxy=item_proxy
+                                )
+                            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                                last_error = f"候选URL下载异常: {url}, 详情: {e!r}"
+                                should_retry = True
+                                continue
+                            except Exception as e:
+                                last_error = f"候选URL下载异常: {url}, 详情: {e!r}"
+                                continue
+
                             if result and result.get('file_path'):
                                 return {
                                     'url': url,
@@ -473,33 +492,57 @@ class DownloadManager:
                                     'success': True,
                                     'index': index
                                 }
-                            last_error = f"候选URL下载失败: {url}"
 
-                    if attempt < max_retries:
+                            error_detail = None
+                            if isinstance(result, dict):
+                                status_code = result.get('status_code')
+                                retryable = result.get('retryable', False)
+                                error_detail = (
+                                    result.get('error')
+                                    or result.get('reason')
+                                    or result.get('status')
+                                    or result.get('status_code')
+                                    or result.get('message')
+                                    or result.get('detail')
+                                )
+                                if retryable or status_code == 429 or (status_code is not None and status_code >= 500):
+                                    should_retry = True
+
+                            if error_detail:
+                                last_error = f"候选URL下载失败: {url}, 详情: {error_detail}"
+                            else:
+                                last_error = f"候选URL下载失败: {url}"
+
+                    if attempt < max_retries and should_retry:
                         delay = retry_delay * (2 ** attempt)
                         logger.debug(
-                            f"媒体项下载重试: {url_list[0]}, 尝试 {attempt + 1}/{max_retries + 1}, "
+                            f"媒体项下载重试: {first_url}, 尝试 {attempt + 1}/{max_retries + 1}, "
                             f"候选数: {len(url_list)}, 等待 {delay}s"
                         )
                         await asyncio.sleep(delay)
+                    if not should_retry:
+                        break
 
                 logger.warning(
-                    f"批量下载媒体失败: {url_list[0] if url_list else 'unknown'}, 错误: {last_error or '所有候选URL均下载失败'}"
+                    f"批量下载媒体失败: {first_url or 'unknown'}, 错误: {last_error or '所有候选URL均下载失败'}"
                 )
                 return {
-                    'url': url_list[0] if url_list else None,
+                    'url': first_url,
                     'file_path': None,
                     'size_mb': None,
                     'success': False,
-                    'index': index
+                    'index': index,
+                    'error': last_error or '所有候选URL均下载失败'
                 }
             except Exception as e:
                 url_list = item.get('url_list', [])
                 index = item.get('index', 0)
-                logger.warning(f"批量下载媒体失败: {url_list[0] if url_list else 'unknown'}, 错误: {e}")
+                first_url = url_list[0] if isinstance(url_list, list) and url_list else None
+                logger.warning(f"批量下载媒体失败: {first_url or 'unknown'}, 错误: {e}")
                 return {
-                    'url': url_list[0] if url_list else None,
+                    'url': first_url,
                     'file_path': None,
+                    'size_mb': None,
                     'success': False,
                     'index': index,
                     'error': str(e)

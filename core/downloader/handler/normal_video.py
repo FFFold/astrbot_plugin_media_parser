@@ -113,18 +113,25 @@ async def batch_download_videos(
                     }
 
                 for url in url_list:
-                    result = await download_video_to_cache(
-                        session,
-                        url,
-                        cache_dir,
-                        media_id,
-                        index,
-                        item_headers,
-                        item_proxy
-                    )
+                    try:
+                        result = await download_video_to_cache(
+                            session,
+                            url,
+                            cache_dir,
+                            media_id,
+                            index,
+                            item_headers,
+                            item_proxy
+                        )
+                    except aiohttp.ClientResponseError as e:
+                        logger.debug(f"视频候选URL下载失败: {url}, HTTP {e.status} {e.message}")
+                        continue
+                    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                        logger.debug(f"视频候选URL下载异常: {url}, 错误: {e}")
+                        continue
                     if result and result.get('file_path'):
                         return {
-                            'url': url_list[0],
+                            'url': url,
                             'file_path': result.get('file_path'),
                             'size_mb': result.get('size_mb'),
                             'success': True,

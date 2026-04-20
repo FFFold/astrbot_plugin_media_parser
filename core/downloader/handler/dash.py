@@ -245,10 +245,14 @@ async def download_dash_to_cache(
             "file_path": os.path.normpath(final_path),
             "size_mb": size_mb
         }
+    except (aiohttp.ClientResponseError, aiohttp.ClientError, asyncio.TimeoutError):
+        cleanup_file(video_temp_path)
+        cleanup_file(audio_temp_path)
+        cleanup_file(output_path)
+        raise
     except Exception as e:
         logger.warning(f"DASH 下载失败: video={video_url}, 错误: {e}")
         cleanup_file(video_temp_path)
         cleanup_file(audio_temp_path)
         cleanup_file(output_path)
         return None
-
