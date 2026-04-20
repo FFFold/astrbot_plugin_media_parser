@@ -474,9 +474,12 @@ class DownloadManager:
                                     headers=item_headers,
                                     proxy=item_proxy
                                 )
-                            except Exception as e:
+                            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                                 last_error = f"候选URL下载异常: {url}, 详情: {e!r}"
                                 should_retry = True
+                                continue
+                            except Exception as e:
+                                last_error = f"候选URL下载异常: {url}, 详情: {e!r}"
                                 continue
 
                             if result and result.get('file_path'):
