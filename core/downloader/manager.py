@@ -441,6 +441,8 @@ class DownloadManager:
                     index = item.get('index', 0)
                     item_headers = item.get('headers', {})
                     item_proxy = item.get('proxy')
+                    max_retries = 3
+                    retry_delay = 1.0
 
                     if not url_list or not isinstance(url_list, list):
                         return {
@@ -450,26 +452,40 @@ class DownloadManager:
                             'index': index
                         }
 
-                    for url in url_list:
-                        result = await download_media(
-                            session,
-                            url,
-                            media_type=None,
-                            cache_dir=cache_dir,
-                            media_id=media_id,
-                            index=index,
-                            headers=item_headers,
-                            proxy=item_proxy
-                        )
-                        if result and result.get('file_path'):
-                            return {
-                                'url': url_list[0],
-                                'file_path': result.get('file_path'),
-                                'size_mb': result.get('size_mb'),
-                                'success': True,
-                                'index': index
-                            }
-                    
+                    last_error = None
+                    for attempt in range(max_retries + 1):
+                        for url in url_list:
+                            result = await download_media(
+                                session,
+                                url,
+                                media_type=None,
+                                cache_dir=cache_dir,
+                                media_id=media_id,
+                                index=index,
+                                headers=item_headers,
+                                proxy=item_proxy
+                            )
+                            if result and result.get('file_path'):
+                                return {
+                                    'url': url,
+                                    'file_path': result.get('file_path'),
+                                    'size_mb': result.get('size_mb'),
+                                    'success': True,
+                                    'index': index
+                                }
+                            last_error = f"候选URL下载失败: {url}"
+
+                        if attempt < max_retries:
+                            delay = retry_delay * (2 ** attempt)
+                            logger.debug(
+                                f"媒体项下载重试: {url_list[0]}, 尝试 {attempt + 1}/{max_retries + 1}, "
+                                f"候选数: {len(url_list)}, 等待 {delay}s"
+                            )
+                            await asyncio.sleep(delay)
+
+                    logger.warning(
+                        f"批量下载媒体失败: {url_list[0] if url_list else 'unknown'}, 错误: {last_error or '所有候选URL均下载失败'}"
+                    )
                     return {
                         'url': url_list[0] if url_list else None,
                         'file_path': None,
@@ -834,4 +850,3 @@ class DownloadManager:
         if self._active_tasks:
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
         self._active_tasks.clear()
-
