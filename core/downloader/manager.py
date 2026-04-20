@@ -434,26 +434,26 @@ class DownloadManager:
 
         async def download_one(item: Dict[str, Any]) -> Dict[str, Any]:
             """下载单条媒体并返回包含本地路径的处理结果。"""
-            async with semaphore:
-                try:
-                    url_list = item.get('url_list', [])
-                    media_id = item.get('media_id', 'media')
-                    index = item.get('index', 0)
-                    item_headers = item.get('headers', {})
-                    item_proxy = item.get('proxy')
-                    max_retries = 3
-                    retry_delay = 1.0
+            try:
+                url_list = item.get('url_list', [])
+                media_id = item.get('media_id', 'media')
+                index = item.get('index', 0)
+                item_headers = item.get('headers', {})
+                item_proxy = item.get('proxy')
+                max_retries = 3
+                retry_delay = 1.0
 
-                    if not url_list or not isinstance(url_list, list):
-                        return {
-                            'url': url_list[0] if url_list else None,
-                            'file_path': None,
-                            'success': False,
-                            'index': index
-                        }
+                if not url_list or not isinstance(url_list, list):
+                    return {
+                        'url': url_list[0] if url_list else None,
+                        'file_path': None,
+                        'success': False,
+                        'index': index
+                    }
 
-                    last_error = None
-                    for attempt in range(max_retries + 1):
+                last_error = None
+                for attempt in range(max_retries + 1):
+                    async with semaphore:
                         for url in url_list:
                             result = await download_media(
                                 session,
@@ -475,35 +475,35 @@ class DownloadManager:
                                 }
                             last_error = f"候选URL下载失败: {url}"
 
-                        if attempt < max_retries:
-                            delay = retry_delay * (2 ** attempt)
-                            logger.debug(
-                                f"媒体项下载重试: {url_list[0]}, 尝试 {attempt + 1}/{max_retries + 1}, "
-                                f"候选数: {len(url_list)}, 等待 {delay}s"
-                            )
-                            await asyncio.sleep(delay)
+                    if attempt < max_retries:
+                        delay = retry_delay * (2 ** attempt)
+                        logger.debug(
+                            f"媒体项下载重试: {url_list[0]}, 尝试 {attempt + 1}/{max_retries + 1}, "
+                            f"候选数: {len(url_list)}, 等待 {delay}s"
+                        )
+                        await asyncio.sleep(delay)
 
-                    logger.warning(
-                        f"批量下载媒体失败: {url_list[0] if url_list else 'unknown'}, 错误: {last_error or '所有候选URL均下载失败'}"
-                    )
-                    return {
-                        'url': url_list[0] if url_list else None,
-                        'file_path': None,
-                        'size_mb': None,
-                        'success': False,
-                        'index': index
-                    }
-                except Exception as e:
-                    url_list = item.get('url_list', [])
-                    index = item.get('index', 0)
-                    logger.warning(f"批量下载媒体失败: {url_list[0] if url_list else 'unknown'}, 错误: {e}")
-                    return {
-                        'url': url_list[0] if url_list else None,
-                        'file_path': None,
-                        'success': False,
-                        'index': index,
-                        'error': str(e)
-                    }
+                logger.warning(
+                    f"批量下载媒体失败: {url_list[0] if url_list else 'unknown'}, 错误: {last_error or '所有候选URL均下载失败'}"
+                )
+                return {
+                    'url': url_list[0] if url_list else None,
+                    'file_path': None,
+                    'size_mb': None,
+                    'success': False,
+                    'index': index
+                }
+            except Exception as e:
+                url_list = item.get('url_list', [])
+                index = item.get('index', 0)
+                logger.warning(f"批量下载媒体失败: {url_list[0] if url_list else 'unknown'}, 错误: {e}")
+                return {
+                    'url': url_list[0] if url_list else None,
+                    'file_path': None,
+                    'success': False,
+                    'index': index,
+                    'error': str(e)
+                }
 
         tasks = [asyncio.create_task(download_one(item)) for item in media_items]
         self._active_tasks.update(tasks)
