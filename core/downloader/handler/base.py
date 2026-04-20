@@ -315,6 +315,10 @@ async def download_media_from_url(
                         pass
                 return os.path.normpath(file_path), size_mb
             return None, None
+    except aiohttp.ClientResponseError:
+        raise
+    except (aiohttp.ClientError, asyncio.TimeoutError):
+        raise
     except Exception as e:
         logger.warning(f"下载媒体失败: {media_url}, 错误: {e}")
         return None, None
