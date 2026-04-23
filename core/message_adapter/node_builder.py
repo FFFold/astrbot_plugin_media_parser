@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional, Union
 
 from ..logger import logger
 
-from astrbot.api.message_components import Plain, Image, Video, Node, Nodes
+from astrbot.api.message_components import Plain, Image, Video
 
 from ..downloader.utils import strip_media_prefixes
 from ..types import BuildAllNodesResult, LinkBuildMeta
@@ -155,19 +155,25 @@ def build_text_node(metadata: Dict[str, Any], max_video_size_mb: float = 0.0, en
 
 def build_media_nodes(
     metadata: Dict[str, Any],
-    use_local_files: bool = False
+    use_local_files: bool = False,
+    enable_rich_media: bool = True
 ) -> List[Union[Image, Video]]:
     """构建媒体节点
 
     Args:
         metadata: 元数据字典
         use_local_files: 是否使用本地文件
+        enable_rich_media: 是否发送富媒体节点
 
     Returns:
         媒体节点列表（Image或Video节点）
     """
     nodes = []
     url = metadata.get('url', '')
+
+    if not enable_rich_media:
+        logger.debug(f"富媒体发送已关闭，跳过媒体节点构建: {url}")
+        return nodes
     
     if metadata.get('exceeds_max_size'):
         logger.debug(f"媒体超过大小限制，跳过节点构建: {url}")
@@ -221,6 +227,11 @@ def build_media_nodes(
             if use_fts and file_idx < len(file_token_urls)
             else None
         )
+        local_file_path = (
+            file_paths[file_idx]
+            if use_local_files and file_idx < len(file_paths)
+            else None
+        )
         if token_url:
             try:
                 nodes.append(Video.fromURL(token_url))
@@ -229,7 +240,7 @@ def build_media_nodes(
             except Exception as e:
                 logger.warning(f"使用Token URL构建视频节点失败: {token_url}, 错误: {e}")
         
-        if use_fts:
+        if use_fts and not (local_file_path and os.path.exists(local_file_path)):
             actual_video_url = strip_media_prefixes(video_url)
             try:
                 nodes.append(Video.fromURL(actual_video_url))
@@ -264,6 +275,11 @@ def build_media_nodes(
             if use_fts and file_idx < len(file_token_urls)
             else None
         )
+        local_file_path = (
+            file_paths[file_idx]
+            if use_local_files and file_idx < len(file_paths)
+            else None
+        )
         if token_url:
             try:
                 nodes.append(Image.fromURL(token_url))
@@ -272,7 +288,7 @@ def build_media_nodes(
             except Exception as e:
                 logger.warning(f"使用Token URL构建图片节点失败: {token_url}, 错误: {e}")
         
-        if use_fts:
+        if use_fts and not (local_file_path and os.path.exists(local_file_path)):
             try:
                 nodes.append(Image.fromURL(image_url))
             except Exception as e:
@@ -298,7 +314,8 @@ def build_nodes_for_link(
     metadata: Dict[str, Any],
     use_local_files: bool = False,
     max_video_size_mb: float = 0.0,
-    enable_text_metadata: bool = True
+    enable_text_metadata: bool = True,
+    enable_rich_media: bool = True
 ) -> List[Union[Plain, Image, Video]]:
     """构建单个链接的节点列表
 
@@ -307,6 +324,7 @@ def build_nodes_for_link(
         use_local_files: 是否使用本地文件
         max_video_size_mb: 最大允许的视频大小(MB)，用于显示详细的错误信息
         enable_text_metadata: 是否发送图文文本消息
+        enable_rich_media: 是否发送富媒体消息
 
     Returns:
         节点列表（Plain、Image、Video对象）
@@ -317,7 +335,11 @@ def build_nodes_for_link(
     if text_node:
         nodes.append(text_node)
     
-    media_nodes = build_media_nodes(metadata, use_local_files)
+    media_nodes = build_media_nodes(
+        metadata,
+        use_local_files,
+        enable_rich_media
+    )
     nodes.extend(media_nodes)
     
     return nodes
@@ -348,7 +370,8 @@ def build_all_nodes(
     is_auto_pack: bool,
     large_video_threshold_mb: float = 0.0,
     max_video_size_mb: float = 0.0,
-    enable_text_metadata: bool = True
+    enable_text_metadata: bool = True,
+    enable_rich_media: bool = True
 ) -> BuildAllNodesResult:
     """构建所有链接的节点，处理消息打包逻辑
 
@@ -358,6 +381,7 @@ def build_all_nodes(
         large_video_threshold_mb: 大视频阈值(MB)
         max_video_size_mb: 最大允许的视频大小(MB)，用于显示错误信息
         enable_text_metadata: 是否发送图文文本消息
+        enable_rich_media: 是否发送富媒体消息
 
     Returns:
         BuildAllNodesResult 命名元组
@@ -389,7 +413,8 @@ def build_all_nodes(
             metadata,
             use_local_files,
             max_video_size_mb,
-            enable_text_metadata
+            enable_text_metadata,
+            enable_rich_media
         )
         
         logger.debug(f"节点构建完成[{idx}]: {url}, 节点数量: {len(link_nodes)}")

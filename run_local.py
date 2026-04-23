@@ -15,6 +15,7 @@ try:
     from core.parser import ParserManager
     from core.parser.utils import format_duration_ms
     from core.downloader import DownloadManager
+    from core.logger import logger
     from core.parser.platform import (
         BilibiliParser,
         DouyinParser,
@@ -33,8 +34,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
-from core.logger import logger
 
 
 def print_metadata(metadata: Dict[str, Any], url: str, parser_name: str):
@@ -114,14 +113,14 @@ def print_download_result(metadata: Dict[str, Any], url: str):
     failed_video_count = metadata.get('failed_video_count', 0)
     failed_image_count = metadata.get('failed_image_count', 0)
     
-    print(f"\n媒体统计:")
+    print("\n媒体统计:")
     print(f"  视频: {video_count} 个 (失败: {failed_video_count})")
     print(f"  图片: {image_count} 张 (失败: {failed_image_count})")
     
     video_sizes = metadata.get('video_sizes', [])
     total_video_size = metadata.get('total_video_size_mb', 0.0)
     if video_sizes:
-        print(f"\n视频大小:")
+        print("\n视频大小:")
         for idx, size in enumerate(video_sizes, 1):
             if size is not None:
                 print(f"  视频[{idx}]: {size:.2f} MB")
@@ -195,7 +194,7 @@ async def parse_and_confirm_download(
         print("\n" + "=" * 80)
         print("统计汇总")
         print("-" * 80)
-        print(f"链接解析:")
+        print("链接解析:")
         print(f"  成功: {parse_success_count} 个")
         print(f"  失败: {parse_fail_count} 个")
         print(f"  总计: {len(metadata_list)} 个")
@@ -218,7 +217,7 @@ async def parse_and_confirm_download(
                 print("\n" + "=" * 80)
                 print("统计汇总")
                 print("-" * 80)
-                print(f"链接解析:")
+                print("链接解析:")
                 print(f"  成功: {parse_success_count} 个")
                 print(f"  失败: {parse_fail_count} 个")
                 print(f"  总计: {len(metadata_list)} 个")
@@ -274,11 +273,11 @@ async def parse_and_confirm_download(
     print("\n" + "=" * 80)
     print("统计汇总")
     print("-" * 80)
-    print(f"链接解析:")
+    print("链接解析:")
     print(f"  成功: {parse_success_count} 个")
     print(f"  失败: {parse_fail_count} 个")
     print(f"  总计: {len(metadata_list)} 个")
-    print(f"\n媒体下载:")
+    print("\n媒体下载:")
     print(f"  视频成功: {total_video_success} 个")
     print(f"  视频失败: {total_video_fail} 个")
     print(f"  图片成功: {total_image_success} 张")
@@ -396,7 +395,15 @@ async def main(
                         else:
                             empty_line_count = 0
                             if '\n' in line or '\r' in line:
-                                multilines = [l.strip() for l in line.replace('\r\n', '\n').replace('\r', '\n').split('\n') if l.strip()]
+                                normalized_line = (
+                                    line.replace('\r\n', '\n')
+                                    .replace('\r', '\n')
+                                )
+                                multilines = [
+                                    part.strip()
+                                    for part in normalized_line.split('\n')
+                                    if part.strip()
+                                ]
                                 lines.extend(multilines)
                             else:
                                 lines.append(line)

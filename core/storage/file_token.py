@@ -16,7 +16,8 @@ async def register_files_with_token_service(
     确保节点构建时不会回退到 fromFileSystem（临时目录下的文件
     对消息平台不可达）。注册失败时回退到原始直链。
     """
-    metadata['use_file_token_service'] = True
+    metadata['use_file_token_service'] = False
+    metadata['file_token_urls'] = []
 
     file_paths = metadata.get('file_paths', [])
     if not file_paths or metadata.get('error'):
@@ -60,3 +61,6 @@ async def register_files_with_token_service(
             file_token_urls.append(None)
 
     metadata['file_token_urls'] = file_token_urls
+    metadata['use_file_token_service'] = any(
+        url is not None for url in file_token_urls
+    )

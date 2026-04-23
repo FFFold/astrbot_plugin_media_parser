@@ -98,6 +98,12 @@
                 "hint": "以文本发送标题、作者、简介等信息",
                 "default": true
             },
+            "rich_media": {
+                "description": "发送富媒体",
+                "type": "bool",
+                "hint": "发送图片、视频等富媒体内容；与文本元数据同时关闭时将直接停用解析入口",
+                "default": true
+            },
             "hot_comments": {
                 "description": "热评设置",
                 "type": "object",

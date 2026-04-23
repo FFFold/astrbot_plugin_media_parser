@@ -660,8 +660,8 @@ class BilibiliParser(BaseVideoParser):
                     result_links_set.add(av_url)
 
         opus_pattern = (
-            rf'https?://(?:www|m|mobile)\.bilibili\.com/opus/'
-            rf'(\d+)[^\s<>"\'()]*'
+            r'https?://(?:www|m|mobile)\.bilibili\.com/opus/'
+            r'(\d+)[^\s<>"\'()]*'
         )
         opus_matches = re.finditer(opus_pattern, text, re.IGNORECASE)
         for match in opus_matches:

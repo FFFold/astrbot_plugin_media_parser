@@ -45,7 +45,10 @@ class DownloadManager:
             if max_concurrent_downloads is not None 
             else Config.DOWNLOAD_MANAGER_MAX_CONCURRENT
         )
-        self.effective_pre_download = pre_download_all_media and check_cache_dir_available(cache_dir)
+        self._cache_dir_available = check_cache_dir_available(cache_dir)
+        self.effective_pre_download = (
+            pre_download_all_media and self._cache_dir_available
+        )
         
         self._active_tasks: set[asyncio.Task] = set()
         self._shutting_down = False
@@ -583,7 +586,18 @@ class DownloadManager:
                     video_count, image_count
                 )
         
-        if self.effective_pre_download:
+        force_pre_download = bool(metadata.get('force_pre_download', False))
+        effective_pre_download = (
+            self.effective_pre_download or
+            (force_pre_download and self._cache_dir_available)
+        )
+        if force_pre_download and not self.effective_pre_download:
+            logger.debug(
+                f"鍏冩暟鎹姹傚己鍒堕涓嬭浇: {url}, "
+                f"cache_dir_available={self._cache_dir_available}"
+            )
+
+        if effective_pre_download:
             return await self._process_with_pre_download(
                 session, metadata, video_urls, image_urls, video_sizes, proxy_addr
             )
@@ -610,7 +624,6 @@ class DownloadManager:
         """使用预下载策略处理媒体并补齐回传字段。"""
         url = metadata.get('url', '')
         video_force_download = metadata.get('video_force_download', False)
-        video_count = len(video_urls)
         image_count = len(image_urls)
         
         logger.debug(f"开始批量下载所有媒体: {url}, 视频: {len(video_urls)}, 图片: {len(image_urls)}")
@@ -714,7 +727,6 @@ class DownloadManager:
         """使用直链策略处理媒体并补齐回传字段。"""
         url = metadata.get('url', '')
         video_force_download = metadata.get('video_force_download', False)
-        video_count = len(video_urls)
         image_count = len(image_urls)
 
         logger.debug(f"使用直链模式处理媒体: {url}, 视频: {len(video_urls)}, 图片: {len(image_urls)}")

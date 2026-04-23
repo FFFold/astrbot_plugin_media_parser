@@ -76,8 +76,6 @@ class VideoParserPlugin(Star):
         if self.download_manager.cache_dir:
             CacheRegistry.cleanup_marked_in(self.download_manager.cache_dir)
 
-    # ── 内部辅助 ────────────────────────────────────────
-
     def _trigger_bilibili_cookie_assist_if_needed(self):
         if not self.bilibili_parser:
             return
@@ -173,11 +171,16 @@ class VideoParserPlugin(Star):
             logger.warning(f"管理员清理缓存失败: {e}")
             await event.send(event.plain_result(f"清理失败: {e}"))
 
-    # ── 主事件处理 ──────────────────────────────────────
-
     @filter.event_message_type(EventMessageType.ALL)
     async def auto_parse(self, event: AstrMessageEvent):
         cfg = self.config_manager
+        if not cfg.message.has_any_output():
+            if cfg.admin.debug_mode:
+                self.logger.debug(
+                    "发送文本元数据与富媒体均已关闭，"
+                    "在消息入口处直接跳过解析"
+                )
+            return
         self.admin_cookie_assist.try_update_admin_origin(event)
 
         is_private = event.is_private_chat()
@@ -291,8 +294,6 @@ class VideoParserPlugin(Star):
                         f"{metadata.get('video_force_download')}"
                     )
 
-            # ── 元数据处理（下载）────────────────────────
-
             async def process_single(
                 metadata: Dict[str, Any]
             ) -> Dict[str, Any]:
@@ -341,8 +342,6 @@ class VideoParserPlugin(Star):
                     md['error'] = error_msg
                     processed_metadata_list.append(md)
 
-            # ── 文件 Token 服务注册 ──────────────────────
-
             if cfg.relay.enabled:
                 for metadata in processed_metadata_list:
                     await register_files_with_token_service(
@@ -351,14 +350,13 @@ class VideoParserPlugin(Star):
                         cfg.relay.file_token_ttl,
                     )
 
-            # ── 节点构建与发送 ───────────────────────────
-
             build_result = build_all_nodes(
                 processed_metadata_list,
                 cfg.message.auto_pack,
                 cfg.download.large_video_threshold_mb,
                 cfg.download.max_video_size_mb,
                 cfg.message.text_metadata,
+                cfg.message.rich_media,
             )
 
             if cfg.admin.debug_mode:

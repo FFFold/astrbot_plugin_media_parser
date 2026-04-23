@@ -1,5 +1,5 @@
 """消息发送封装，统一不同会话场景下的发送行为。"""
-from typing import Any, List
+from typing import Any
 
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Nodes, Plain, Image, Node

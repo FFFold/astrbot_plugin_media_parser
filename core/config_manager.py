@@ -31,9 +31,6 @@ BILIBILI_QUALITY_MAP = {
 }
 
 
-# ── 配置分组 dataclass ──────────────────────────────────
-
-
 @dataclass
 class TriggerConfig:
     auto_parse: bool = True
@@ -58,10 +55,14 @@ class MessageConfig:
     opening_enabled: bool = True
     opening_content: str = "流媒体解析bot为您服务 ٩( 'ω' )و"
     text_metadata: bool = True
+    rich_media: bool = True
     hot_comment_count: int = 0
     hot_comment_bilibili: bool = True
     hot_comment_weibo: bool = True
     hot_comment_xiaohongshu: bool = True
+
+    def has_any_output(self) -> bool:
+        return self.text_metadata or self.rich_media
 
 
 @dataclass
@@ -142,9 +143,6 @@ class AdminConfig:
     debug_mode: bool = False
 
 
-# ── 配置管理器 ──────────────────────────────────────────
-
-
 class ConfigManager:
 
     """配置读取门面，向业务层提供类型安全的配置访问。"""
@@ -153,12 +151,8 @@ class ConfigManager:
         self.bilibili_parser = None
         self._parse_config()
 
-    # ── 内部解析 ────────────────────────────────────────
-
     def _parse_config(self):
         """解析原始 dict，填充各领域配置分组。"""
-
-        # --- trigger ---
         trigger_raw = self._config.get("trigger", {})
         self.trigger = TriggerConfig(
             auto_parse=trigger_raw.get("auto_parse", True),
@@ -175,14 +169,14 @@ class ConfigManager:
                 "回复触发也已禁用，解析功能将完全不可用"
             )
 
-        # --- message ---
         message_raw = self._config.get("message", {})
         opening = message_raw.get("opening", {})
         hot_comments = message_raw.get("hot_comments", {})
         if not isinstance(hot_comments, dict):
             hot_comments = {}
 
-        text_metadata_enabled = message_raw.get("text_metadata", True)
+        text_metadata_enabled = bool(message_raw.get("text_metadata", True))
+        rich_media_enabled = bool(message_raw.get("rich_media", True))
         hot_count = self._parse_non_negative_int(
             hot_comments.get("count", 0), 0
         )
@@ -196,6 +190,7 @@ class ConfigManager:
                 "content", "流媒体解析bot为您服务 ٩( 'ω' )و"
             ),
             text_metadata=text_metadata_enabled,
+            rich_media=rich_media_enabled,
             hot_comment_count=hot_count,
             hot_comment_bilibili=bool(hot_comments.get("bilibili", True)),
             hot_comment_weibo=bool(hot_comments.get("weibo", True)),
@@ -203,8 +198,12 @@ class ConfigManager:
                 hot_comments.get("xiaohongshu", True)
             ),
         )
+        if not self.message.has_any_output():
+            logger.warning(
+                "发送文本元数据与发送富媒体均已关闭，"
+                "插件将直接跳过全部链接解析流程"
+            )
 
-        # --- permissions ---
         permissions_raw = self._config.get("permissions", {})
         whitelist = permissions_raw.get("whitelist", {})
         blacklist = permissions_raw.get("blacklist", {})
@@ -229,7 +228,6 @@ class ConfigManager:
             ),
         )
 
-        # --- download ---
         download_raw = self._config.get("download", {})
 
         max_video_size_mb = self._parse_non_negative_float(
@@ -276,7 +274,6 @@ class ConfigManager:
             20
         )
 
-        # --- media_relay ---
         relay_raw = self._config.get("media_relay", {})
         self.relay = MediaRelayConfig(
             enabled=relay_raw.get("enable", False),
@@ -316,7 +313,6 @@ class ConfigManager:
             max_concurrent_downloads=max_concurrent,
         )
 
-        # --- bilibili_enhanced ---
         bili = self._config.get("bilibili_enhanced", {})
         if not isinstance(bili, dict):
             bili = {}
@@ -388,7 +384,6 @@ class ConfigManager:
             admin_request_cooldown_minutes=admin_request_cooldown,
         )
 
-        # --- parsers ---
         parsers_raw = self._config.get("parsers", {})
         self._enable_bilibili = parsers_raw.get("bilibili", True)
         self._enable_douyin = parsers_raw.get("douyin", True)
@@ -398,7 +393,6 @@ class ConfigManager:
         self._enable_xiaoheihe = parsers_raw.get("xiaoheihe", True)
         self._enable_twitter = parsers_raw.get("twitter", True)
 
-        # --- proxy ---
         proxy_raw = self._config.get("proxy", {})
         twitter_proxy = proxy_raw.get("twitter", {})
         self.proxy = ProxyConfig(
@@ -409,7 +403,6 @@ class ConfigManager:
             twitter_use_video_proxy=twitter_proxy.get("video", True),
         )
 
-        # --- admin ---
         admin_raw = self._config.get("admin", {})
         self.admin = AdminConfig(
             clean_cache_keyword=str(
@@ -421,8 +414,6 @@ class ConfigManager:
             import logging
             logger.setLevel(logging.DEBUG)
             logger.debug("Debug模式已启用")
-
-    # ── 工厂方法 ────────────────────────────────────────
 
     def _effective_hot_comment_count(self, enabled: bool) -> int:
         if not self.message.text_metadata:
@@ -489,8 +480,6 @@ class ConfigManager:
             )
 
         return parsers
-
-    # ── 静态辅助 ────────────────────────────────────────
 
     @staticmethod
     def _parse_positive_int(value, default: int) -> int:

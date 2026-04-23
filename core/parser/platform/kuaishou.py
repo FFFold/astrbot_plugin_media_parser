@@ -619,7 +619,6 @@ class KuaishouParser(BaseVideoParser):
                 title = title[:100]
             image_headers, video_headers = self._make_headers()
 
-            # --- 优先尝试从 INIT_STATE 结构化数据解析 ---
             ssr = self._parse_init_state_data(html)
             if ssr:
                 photo = ssr.get('photo') or {}
@@ -657,7 +656,6 @@ class KuaishouParser(BaseVideoParser):
                             "video_headers": video_headers,
                         }
 
-            # --- fallback: 旧版正则解析 ---
             video_url = self._parse_video(html)
             if video_url:
                 logger.debug(f"[{self.name}] parse: 检测到视频(regex)")
@@ -761,4 +759,3 @@ class KuaishouParser(BaseVideoParser):
                 raise RuntimeError(f"无法获取媒体URL: {url}")
 
             raise RuntimeError(f"无法解析此URL: {url}")
-
