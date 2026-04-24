@@ -10,6 +10,10 @@
 
 ```
 astrbot_plugin_media_parser/
+├── README.md                        # 用户说明与配置建议
+├── docs/
+│   ├── ARCHITECTURE.md              # 架构与执行链文档
+│   └── PARSER_METHOD_MEMO.md        # 分平台解析方法说明文档
 ├── main.py                          # 插件主入口
 ├── run_local.py                     # 本地测试工具脚本
 ├── core/
@@ -36,8 +40,8 @@ astrbot_plugin_media_parser/
 │   │       ├── kuaishou.py          # 快手解析器
 │   │       ├── weibo.py             # 微博解析器
 │   │       ├── xiaohongshu.py       # 小红书解析器
-│   │       ├── xiaoheihe.py         # 小黑盒解析器
-│   │       └── twitter.py           # 推特解析器
+│   │       ├── xiaoheihe.py         # 小黑盒解析器（签名 API + Nuxt 回退 + BBS 签名接口）
+│   │       └── twitter.py           # 推特解析器（FxTwitter 主路径 + Twitter GraphQL 回退）
 │   ├── downloader/                  # 下载器模块
 │   │   ├── manager.py               # 下载管理器
 │   │   ├── router.py                # 媒体下载路由
@@ -103,6 +107,9 @@ astrbot_plugin_media_parser/
   - 实现各平台特定的链接识别和解析逻辑
   - 提取媒体元数据（标题、作者、视频URL、图片URL等）
   - 处理平台特定的请求头和参数
+  - 平台解析器可以提供多级解析路径，优先使用结构化 API，失败时再回退网页内嵌数据或第三方解析服务
+  - 小黑盒解析器复用 ParseHub 同类签名思路处理 BBS 帖子，并为游戏详情页提供签名 API + Nuxt 回退
+  - Twitter/X 解析器优先使用 FxTwitter，失败时回退 Twitter Guest GraphQL，并将视频标记为倾向预下载
 
 - **运行时管理器** (runtime_manager/)
   - 管理平台辅助运行时（Cookie/登录态等）
@@ -273,6 +280,10 @@ astrbot_plugin_media_parser/
 ```
 main.py::VideoParserPlugin.auto_parse()
   ↓
+检查输出开关
+  ├─ text_metadata = False 且 rich_media = False → 直接返回
+  └─ 否则继续
+  ↓
 admin_cookie_assist.try_update_admin_origin(event)
   ↓
 权限与黑白名单检查
@@ -345,6 +356,7 @@ parser::manager::ParserManager.parse_text()
   ├─ video_headers: 视频请求头
   ├─ image_headers: 图片请求头
   ├─ video_force_download: 是否强制下载
+  ├─ force_pre_download: 是否请求下载层尽量使用预下载
   ├─ access_status: 访问状态（如 "full"、"preview" 等，B站会员/付费限制）
   ├─ restriction_type: 限制类型（可选）
   ├─ restriction_label: 限制标签（可选）
@@ -366,6 +378,19 @@ parser::manager::ParserManager.parse_text()
   ↓
 发送开场语（若 enable_opening_msg 启用）
 ```
+
+解析器关键分支补充：
+
+- **小黑盒**
+  - 先识别链接类型：游戏详情页 或 BBS 帖子页
+  - 游戏详情页：`_fetch_game_detail_api()` → `_build_game_result_from_api()` → 失败时 `_fetch_html()` + `_extract_nuxt_data_payload()` + `_find_best_game_dict()`
+  - BBS 帖子：`_fetch_signed_api("/bbs/app/link/tree")` → `_parse_bbs_link()`
+  - 入口 `appid` 统一经 `_normalize_appid()` 处理，兼容纯数字和字母数字混合分享 id
+
+- **Twitter / X**
+  - 先尝试 FxTwitter：`_fetch_media_info()` → `_parse_fxtwitter_response()`
+  - FxTwitter 失败后尝试 Guest GraphQL：`_fetch_twitter_guest_token()` → `_fetch_media_info_graphql()` → `_parse_graphql_tweet()`
+  - 视频结果会附带 `force_pre_download=True`，供下载层优先落地到本地文件后发送
 
 #### 2.2.4 元数据处理阶段
 
@@ -416,7 +441,7 @@ downloader::manager::DownloadManager.process_metadata()
 ```
 main.py::VideoParserPlugin.auto_parse()
   ↓
-message_adapter::node_builder::build_all_nodes(enable_text_metadata)
+message_adapter::node_builder::build_all_nodes(enable_text_metadata, enable_rich_media)
   ├─ 遍历所有元数据
   │   └─ message_adapter::node_builder::build_nodes_for_link()
   │       ├─ 构建文本节点（受 enable_text_metadata 控制）
@@ -429,7 +454,7 @@ message_adapter::node_builder::build_all_nodes(enable_text_metadata)
   │       │       ├─ 下载失败统计（failed_video_count、failed_image_count）
   │       │       └─ 原始链接
   │       │
-  │       └─ 构建媒体节点
+  │       └─ 构建媒体节点（受 enable_rich_media 控制）
   │           └─ message_adapter::node_builder::build_media_nodes()
   │               ├─ 判断是否使用本地文件（use_local_files）
   │               ├─ 构建视频节点
@@ -601,6 +626,7 @@ CacheRegistry.cleanup_marked_in(cache_dir)
   ├─ image_urls: List[List[str]]
   ├─ video_headers, image_headers
   ├─ video_force_download
+  ├─ force_pre_download
   ├─ access_status, restriction_type, restriction_label
   ├─ can_access_full_video, is_preview_only, access_message
   ├─ timelength_ms, available_length_ms

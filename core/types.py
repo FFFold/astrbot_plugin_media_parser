@@ -8,8 +8,6 @@ class MediaMetadata(TypedDict, total=False):
     字段按产出阶段分组，total=False 表示任一字段均可缺省。
     """
 
-    # ── 解析阶段（平台解析器产出）──────────────────────
-
     url: str
     source_url: str
     title: str
@@ -24,6 +22,7 @@ class MediaMetadata(TypedDict, total=False):
     image_headers: Dict[str, str]
     video_headers: Dict[str, str]
     video_force_download: bool
+    force_pre_download: bool
 
     access_status: str
     restriction_type: str
@@ -41,8 +40,6 @@ class MediaMetadata(TypedDict, total=False):
 
     error: str
 
-    # ── 下载阶段（DownloadManager 回填）─────────────────
-
     file_paths: List[Optional[str]]
     video_sizes: List[Optional[float]]
     max_video_size_mb: float
@@ -55,8 +52,6 @@ class MediaMetadata(TypedDict, total=False):
     has_access_denied: bool
     failed_video_count: int
     failed_image_count: int
-
-    # ── 中转阶段（文件 Token 服务注册后回填）──────────────
 
     use_file_token_service: bool
     file_token_urls: List[Optional[str]]

@@ -334,7 +334,6 @@ class DouyinParser(BaseVideoParser):
 
             logger.debug(f"[{self.name}] parse: 视频信息获取成功 {url}")
             is_gallery = result.get('is_gallery', False)
-            images = result.get('images', [])
             image_url_lists = result.get('image_url_lists', [])
             video_url = result.get('video_url')
             title = result.get('title', '')

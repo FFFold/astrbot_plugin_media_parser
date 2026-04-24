@@ -55,8 +55,6 @@ class CacheRegistry:
         self._path = registry_path or _default_registry_path()
         self._dirs: Dict[str, str] = self._load()
 
-    # ── 持久化 ──────────────────────────────────────────
-
     def _load(self) -> Dict[str, str]:
         """从 JSON 加载 {abs_path: label} 映射。"""
         if not os.path.isfile(self._path):
@@ -78,8 +76,6 @@ class CacheRegistry:
         except Exception as e:
             logger.warning(f"保存缓存注册表失败: {e}")
 
-    # ── 目录注册 ────────────────────────────────────────
-
     def register(self, cache_dir: str, label: str = "") -> None:
         """将缓存根目录注册到注册表。
 
@@ -99,13 +95,9 @@ class CacheRegistry:
         if is_new:
             logger.debug(f"注册缓存目录: {abs_dir} (label={label or '无'})")
 
-    # ── 查询 ────────────────────────────────────────────
-
     def get_all(self) -> Dict[str, str]:
         """返回全部已注册目录 {abs_path: label}。"""
         return dict(self._dirs)
-
-    # ── 安全清理 ────────────────────────────────────────
 
     @staticmethod
     def cleanup_marked_in(root_dir: str) -> Tuple[int, int]:
