@@ -446,6 +446,7 @@ class DownloadManager:
 
                 status_code = result.get('status_code')
                 retryable = result.get('retryable', False)
+                valid_status_code = status_code if isinstance(status_code, int) else None
                 error_detail = (
                     result.get('error')
                     or result.get('reason')
@@ -454,7 +455,7 @@ class DownloadManager:
                     or result.get('message')
                     or result.get('detail')
                 )
-                should_retry = retryable or status_code == 429 or (status_code is not None and status_code >= 500)
+                should_retry = retryable or valid_status_code == 429 or (valid_status_code is not None and valid_status_code >= 500)
                 return error_detail, should_retry
 
             try:

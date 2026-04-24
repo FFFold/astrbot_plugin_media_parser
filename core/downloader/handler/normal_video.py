@@ -9,7 +9,7 @@ from ...logger import logger
 
 from ...constants import Config
 from ..utils import process_gather_results, generate_cache_file_path
-from .base import download_media_from_url
+from .base import download_media_from_url, NonRetryableMediaError
 
 
 async def download_video_to_cache(
@@ -125,6 +125,9 @@ async def batch_download_videos(
                         )
                     except aiohttp.ClientResponseError as e:
                         logger.debug(f"视频候选URL下载失败: {url}, HTTP {e.status} {e.message}")
+                        continue
+                    except NonRetryableMediaError as e:
+                        logger.debug(f"视频候选URL非重试失败: {url}, 错误: {e}")
                         continue
                     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                         logger.debug(f"视频候选URL下载异常: {url}, 错误: {e}")
