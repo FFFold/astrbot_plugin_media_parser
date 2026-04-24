@@ -17,6 +17,18 @@ from ..storage import cleanup_files, cleanup_directory
 from ..constants import Config
 
 
+def _build_candidate_error_message(
+    url: str,
+    error_detail: Any = None,
+    is_exception: bool = False,
+) -> str:
+    """构建候选 URL 下载失败信息。"""
+    prefix = "候选URL下载异常" if is_exception else "候选URL下载失败"
+    if error_detail is not None:
+        return f"{prefix}: {url}, 详情: {error_detail}"
+    return f"{prefix}: {url}"
+
+
 class DownloadManager:
 
     """下载调度器，协调不同处理器完成媒体下载。"""
@@ -445,12 +457,6 @@ class DownloadManager:
 
         async def download_one(item: Dict[str, Any]) -> Dict[str, Any]:
             """下载单条媒体并返回包含本地路径的处理结果。"""
-            def build_error_message(url: str, error_detail: Any = None, is_exception: bool = False) -> str:
-                prefix = "候选URL下载异常" if is_exception else "候选URL下载失败"
-                if error_detail is not None:
-                    return f"{prefix}: {url}, 详情: {error_detail}"
-                return f"{prefix}: {url}"
-
             try:
                 url_list = item.get('url_list', [])
                 media_id = item.get('media_id', 'media')
@@ -488,18 +494,18 @@ class DownloadManager:
                                     proxy=item_proxy
                                 )
                             except aiohttp.ClientResponseError as e:
-                                last_error = build_error_message(url, f"HTTP {e.status} {e.message}")
-                                should_retry = e.status == 429 or e.status >= 500
+                                last_error = _build_candidate_error_message(url, f"HTTP {e.status} {e.message}")
+                                should_retry = should_retry or e.status == 429 or e.status >= 500
                                 continue
                             except NonRetryableMediaError as e:
-                                last_error = build_error_message(url, str(e))
+                                last_error = _build_candidate_error_message(url, str(e))
                                 continue
                             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                                last_error = build_error_message(url, repr(e), is_exception=True)
+                                last_error = _build_candidate_error_message(url, repr(e), is_exception=True)
                                 should_retry = True
                                 continue
                             except Exception as e:
-                                last_error = build_error_message(url, repr(e), is_exception=True)
+                                last_error = _build_candidate_error_message(url, repr(e), is_exception=True)
                                 logger.debug(f"候选URL未知异常(不重试): {url}, 错误: {e}")
                                 continue
 
@@ -511,7 +517,7 @@ class DownloadManager:
                                     'success': True,
                                     'index': index
                                 }
-                            last_error = build_error_message(url)
+                            last_error = _build_candidate_error_message(url)
 
                     if attempt < max_attempts - 1 and should_retry:
                         delay = retry_delay * (2 ** attempt)
