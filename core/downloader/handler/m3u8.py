@@ -88,12 +88,16 @@ class M3U8Handler:
                 url,
                 headers=self.headers,
                 proxy=self.proxy
-            ) as response:
+                ) as response:
                 response.raise_for_status()
                 with open(output_path, 'wb') as f:
                     async for chunk in response.content.iter_chunked(Config.STREAM_DOWNLOAD_CHUNK_SIZE):
                         f.write(chunk)
             return True
+        except (aiohttp.ClientResponseError, aiohttp.ClientError, asyncio.TimeoutError):
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            raise
         except Exception as e:
             logger.warning(f"下载文件失败 {url}: {e}")
             return False
@@ -158,8 +162,18 @@ class M3U8Handler:
             async with semaphore:
                 return await download_segment(i, url)
 
-        tasks = [download_with_limit(i, url) for i, url in enumerate(segments)]
-        results = await asyncio.gather(*tasks)
+        tasks = [
+            asyncio.create_task(download_with_limit(i, url))
+            for i, url in enumerate(segments)
+        ]
+        try:
+            results = await asyncio.gather(*tasks)
+        except Exception:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
         files = [f for f in results if f is not None]
         return sorted(files)
@@ -336,6 +350,8 @@ class M3U8Handler:
                 logger.info(f"✓ 视频下载完成（无音频）: {output_path}")
                 return True
 
+        except (aiohttp.ClientResponseError, aiohttp.ClientError, asyncio.TimeoutError):
+            raise
         except Exception as e:
             logger.error(f"✗ 视频下载失败: {e}")
             return False
@@ -389,7 +405,8 @@ class M3U8Handler:
                 }
 
             return None
+        except (aiohttp.ClientResponseError, aiohttp.ClientError, asyncio.TimeoutError):
+            raise
         except Exception as e:
             logger.warning(f"下载 m3u8 到缓存目录失败: {m3u8_url}, 错误: {e}")
             return None
-

@@ -12,8 +12,21 @@ from ..logger import logger
 from .utils import check_cache_dir_available, process_gather_results, strip_media_prefixes
 from .validator import get_video_size
 from .router import download_media
+from .handler.base import NonRetryableMediaError
 from ..storage import cleanup_files, cleanup_directory
 from ..constants import Config
+
+
+def _build_candidate_error_message(
+    url: str,
+    error_detail: Any = None,
+    is_exception: bool = False,
+) -> str:
+    """构建候选 URL 下载失败信息。"""
+    prefix = "候选URL下载异常" if is_exception else "候选URL下载失败"
+    if error_detail is not None:
+        return f"{prefix}: {url}, 详情: {error_detail}"
+    return f"{prefix}: {url}"
 
 
 class DownloadManager:
@@ -79,16 +92,26 @@ class DownloadManager:
         proxy = proxy_url if (use_image_proxy and proxy_url) else None
         
         for url in url_list:
-            result = await download_media(
-                session,
-                url,
-                media_type=None,
-                cache_dir=None,
-                media_id='image',
-                index=img_idx,
-                headers=headers,
-                proxy=proxy
-            )
+            try:
+                result = await download_media(
+                    session,
+                    url,
+                    media_type=None,
+                    cache_dir=None,
+                    media_id='image',
+                    index=img_idx,
+                    headers=headers,
+                    proxy=proxy
+                )
+            except aiohttp.ClientResponseError as e:
+                logger.debug(f"图片候选URL下载失败: {url}, HTTP {e.status} {e}")
+                continue
+            except NonRetryableMediaError as e:
+                logger.debug(f"图片候选URL非重试失败: {url}, 错误: {e}")
+                continue
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                logger.debug(f"图片候选URL下载异常: {url}, 错误: {e}")
+                continue
             if result and result.get('file_path'):
                 return result.get('file_path')
         
@@ -434,60 +457,102 @@ class DownloadManager:
 
         async def download_one(item: Dict[str, Any]) -> Dict[str, Any]:
             """下载单条媒体并返回包含本地路径的处理结果。"""
-            async with semaphore:
-                try:
-                    url_list = item.get('url_list', [])
-                    media_id = item.get('media_id', 'media')
-                    index = item.get('index', 0)
-                    item_headers = item.get('headers', {})
-                    item_proxy = item.get('proxy')
+            try:
+                url_list = item.get('url_list', [])
+                media_id = item.get('media_id', 'media')
+                index = item.get('index', 0)
+                item_headers = item.get('headers', {})
+                item_proxy = item.get('proxy')
+                # Total attempts including the first download try.
+                max_attempts = 4
+                retry_delay = 1.0
+                first_url = url_list[0] if isinstance(url_list, list) and url_list else None
 
-                    if not url_list or not isinstance(url_list, list):
-                        return {
-                            'url': url_list[0] if url_list else None,
-                            'file_path': None,
-                            'success': False,
-                            'index': index
-                        }
-
-                    for url in url_list:
-                        result = await download_media(
-                            session,
-                            url,
-                            media_type=None,
-                            cache_dir=cache_dir,
-                            media_id=media_id,
-                            index=index,
-                            headers=item_headers,
-                            proxy=item_proxy
-                        )
-                        if result and result.get('file_path'):
-                            return {
-                                'url': url_list[0],
-                                'file_path': result.get('file_path'),
-                                'size_mb': result.get('size_mb'),
-                                'success': True,
-                                'index': index
-                            }
-                    
+                if not url_list or not isinstance(url_list, list):
                     return {
-                        'url': url_list[0] if url_list else None,
+                        'url': first_url,
                         'file_path': None,
                         'size_mb': None,
                         'success': False,
                         'index': index
                     }
-                except Exception as e:
-                    url_list = item.get('url_list', [])
-                    index = item.get('index', 0)
-                    logger.warning(f"批量下载媒体失败: {url_list[0] if url_list else 'unknown'}, 错误: {e}")
-                    return {
-                        'url': url_list[0] if url_list else None,
-                        'file_path': None,
-                        'success': False,
-                        'index': index,
-                        'error': str(e)
-                    }
+
+                last_error = None
+                for attempt in range(max_attempts):
+                    should_retry = False
+                    async with semaphore:
+                        for url in url_list:
+                            try:
+                                result = await download_media(
+                                    session,
+                                    url,
+                                    media_type=None,
+                                    cache_dir=cache_dir,
+                                    media_id=media_id,
+                                    index=index,
+                                    headers=item_headers,
+                                    proxy=item_proxy
+                                )
+                            except aiohttp.ClientResponseError as e:
+                                last_error = _build_candidate_error_message(url, f"HTTP {e.status} {e}")
+                                should_retry = should_retry or e.status == 429 or e.status >= 500
+                                continue
+                            except NonRetryableMediaError as e:
+                                last_error = _build_candidate_error_message(url, str(e))
+                                continue
+                            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                                last_error = _build_candidate_error_message(url, repr(e), is_exception=True)
+                                should_retry = True
+                                continue
+                            except Exception as e:
+                                last_error = _build_candidate_error_message(url, repr(e), is_exception=True)
+                                logger.debug(f"候选URL未知异常(不重试): {url}, 错误: {e}")
+                                continue
+
+                            if result and result.get('file_path'):
+                                return {
+                                    'url': url,
+                                    'file_path': result.get('file_path'),
+                                    'size_mb': result.get('size_mb'),
+                                    'success': True,
+                                    'index': index
+                                }
+                            last_error = _build_candidate_error_message(url)
+
+                    if attempt < max_attempts - 1 and should_retry:
+                        delay = retry_delay * (2 ** attempt)
+                        logger.debug(
+                            f"媒体项下载重试: {first_url}, 尝试 {attempt + 1}/{max_attempts}, "
+                            f"候选数: {len(url_list)}, 等待 {delay}s"
+                        )
+                        await asyncio.sleep(delay)
+                    if not should_retry:
+                        break
+
+                logger.warning(
+                    f"批量下载媒体失败: {first_url or 'unknown'}, 错误: {last_error or '所有候选URL均下载失败'}"
+                )
+                return {
+                    'url': first_url,
+                    'file_path': None,
+                    'size_mb': None,
+                    'success': False,
+                    'index': index,
+                    'error': last_error or '所有候选URL均下载失败'
+                }
+            except Exception as e:
+                url_list = item.get('url_list', [])
+                index = item.get('index', 0)
+                first_url = url_list[0] if isinstance(url_list, list) and url_list else None
+                logger.warning(f"批量下载媒体失败: {first_url or 'unknown'}, 错误: {e}")
+                return {
+                    'url': first_url,
+                    'file_path': None,
+                    'size_mb': None,
+                    'success': False,
+                    'index': index,
+                    'error': str(e)
+                }
 
         tasks = [asyncio.create_task(download_one(item)) for item in media_items]
         self._active_tasks.update(tasks)
@@ -834,4 +899,3 @@ class DownloadManager:
         if self._active_tasks:
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
         self._active_tasks.clear()
-
