@@ -21,6 +21,12 @@ class NonRetryableMediaError(Exception):
         self.media_url = media_url
         self.retryable = False
 
+    def __str__(self) -> str:
+        message = super().__str__()
+        if self.media_url:
+            return f"{message}: {self.media_url}"
+        return message
+
 
 async def _get_file_size(
     session: aiohttp.ClientSession,
