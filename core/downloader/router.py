@@ -1,5 +1,4 @@
 """下载路由工具，根据链接特征识别媒体类型。"""
-import asyncio
 import re
 from typing import Optional, Dict, Any, Literal
 
@@ -11,7 +10,6 @@ from .handler.normal_video import download_video_to_cache
 from .handler.range_downloader import download_video_with_range_to_cache
 from .handler.dash import download_dash_to_cache
 from .handler.m3u8 import M3U8Handler
-from .handler.base import NonRetryableMediaError
 
 
 def detect_media_type(url: str) -> Literal['m3u8', 'image', 'video']:
@@ -116,106 +114,80 @@ async def download_media(
     elif media_type is None:
         media_type = detect_media_type(media_url)
 
-    try:
-        if media_type == 'dash':
-            if not cache_dir or not dash_video_url:
-                return None
-            return await download_dash_to_cache(
-                session=session,
-                video_url=dash_video_url,
-                audio_url=dash_audio_url,
-                cache_dir=cache_dir,
-                media_id=media_id or 'media',
-                index=index,
-                headers=headers,
-                proxy=proxy
-            )
-        
-        if media_type == 'm3u8':
-            if not cache_dir:
-                return None
-            
-            if m3u8_handler is None:
-                m3u8_handler = M3U8Handler(
-                    session=session,
-                    headers=headers,
-                    proxy=proxy
-                )
-            
-            return await m3u8_handler.download_m3u8_to_cache(
-                m3u8_url=actual_url,
-                cache_dir=cache_dir,
-                media_id=media_id or 'media',
-                index=index,
-                use_ffmpeg=use_ffmpeg
-            )
-        
-        elif media_type == 'image':
-            file_path = await download_image_to_cache(
-                session=session,
-                image_url=actual_url,
-                cache_dir=cache_dir or '',
-                media_id=media_id or 'image',
-                index=index,
-                headers=headers,
-                proxy=proxy
-            )
-            if file_path:
-                return {'file_path': file_path, 'size_mb': None}
+    if media_type == 'dash':
+        if not cache_dir or not dash_video_url:
+            return None
+        return await download_dash_to_cache(
+            session=session,
+            video_url=dash_video_url,
+            audio_url=dash_audio_url,
+            cache_dir=cache_dir,
+            media_id=media_id or 'media',
+            index=index,
+            headers=headers,
+            proxy=proxy
+        )
+    
+    if media_type == 'm3u8':
+        if not cache_dir:
             return None
         
+        if m3u8_handler is None:
+            m3u8_handler = M3U8Handler(
+                session=session,
+                headers=headers,
+                proxy=proxy
+            )
+        
+        return await m3u8_handler.download_m3u8_to_cache(
+            m3u8_url=actual_url,
+            cache_dir=cache_dir,
+            media_id=media_id or 'media',
+            index=index,
+            use_ffmpeg=use_ffmpeg
+        )
+    
+    elif media_type == 'image':
+        file_path = await download_image_to_cache(
+            session=session,
+            image_url=actual_url,
+            cache_dir=cache_dir or '',
+            media_id=media_id or 'image',
+            index=index,
+            headers=headers,
+            proxy=proxy
+        )
+        if file_path:
+            return {'file_path': file_path, 'size_mb': None}
+        return None
+    
+    else:
+        if not cache_dir:
+            return None
+        
+        use_range_download = False
+        
+        if actual_url.startswith('range:'):
+            actual_url = actual_url[6:]
+            use_range_download = True
+        
+        if use_range_download:
+            return await download_video_with_range_to_cache(
+                session=session,
+                video_url=actual_url,
+                cache_dir=cache_dir,
+                media_id=media_id or 'media',
+                index=index,
+                headers=headers,
+                proxy=proxy
+            )
         else:
-            if not cache_dir:
-                return None
-            
-            use_range_download = False
-            
-            if actual_url.startswith('range:'):
-                actual_url = actual_url[6:]
-                use_range_download = True
-            
-            if use_range_download:
-                return await download_video_with_range_to_cache(
-                    session=session,
-                    video_url=actual_url,
-                    cache_dir=cache_dir,
-                    media_id=media_id or 'media',
-                    index=index,
-                    headers=headers,
-                    proxy=proxy
-                )
-            else:
-                return await download_video_to_cache(
-                    session=session,
-                    video_url=actual_url,
-                    cache_dir=cache_dir,
-                    media_id=media_id or 'media',
-                    index=index,
-                    headers=headers,
-                    proxy=proxy
-                )
-    except aiohttp.ClientResponseError as e:
-        logger.debug(f"下载路由HTTP失败: {actual_url[:80]}..., status={e.status}, message={e.message}")
-        return {
-            'file_path': None,
-            'size_mb': None,
-            'error': f"HTTP {e.status} {e.message}",
-            'status_code': e.status
-        }
-    except NonRetryableMediaError as e:
-        media_error_url = e.media_url or actual_url
-        logger.debug(f"下载路由非重试失败: {media_error_url[:80]}..., error={e}")
-        return {
-            'file_path': None,
-            'size_mb': None,
-            'error': str(e),
-            'retryable': False
-        }
-    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-        logger.debug(f"下载路由传输失败: {actual_url[:80]}..., error={e}")
-        return {
-            'file_path': None,
-            'size_mb': None,
-            'error': str(e),
-            'retryable': True
-        }
+            return await download_video_to_cache(
+                session=session,
+                video_url=actual_url,
+                cache_dir=cache_dir,
+                media_id=media_id or 'media',
+                index=index,
+                headers=headers,
+                proxy=proxy
+            )

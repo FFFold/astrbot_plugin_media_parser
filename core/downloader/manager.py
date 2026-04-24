@@ -12,6 +12,7 @@ from ..logger import logger
 from .utils import check_cache_dir_available, process_gather_results, strip_media_prefixes
 from .validator import get_video_size
 from .router import download_media
+from .handler.base import NonRetryableMediaError
 from ..storage import cleanup_files, cleanup_directory
 from ..constants import Config
 
@@ -79,16 +80,26 @@ class DownloadManager:
         proxy = proxy_url if (use_image_proxy and proxy_url) else None
         
         for url in url_list:
-            result = await download_media(
-                session,
-                url,
-                media_type=None,
-                cache_dir=None,
-                media_id='image',
-                index=img_idx,
-                headers=headers,
-                proxy=proxy
-            )
+            try:
+                result = await download_media(
+                    session,
+                    url,
+                    media_type=None,
+                    cache_dir=None,
+                    media_id='image',
+                    index=img_idx,
+                    headers=headers,
+                    proxy=proxy
+                )
+            except aiohttp.ClientResponseError as e:
+                logger.debug(f"图片候选URL下载失败: {url}, HTTP {e.status} {e.message}")
+                continue
+            except NonRetryableMediaError as e:
+                logger.debug(f"图片候选URL非重试失败: {url}, 错误: {e}")
+                continue
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                logger.debug(f"图片候选URL下载异常: {url}, 错误: {e}")
+                continue
             if result and result.get('file_path'):
                 return result.get('file_path')
         
@@ -440,24 +451,6 @@ class DownloadManager:
                     return f"{prefix}: {url}, 详情: {error_detail}"
                 return f"{prefix}: {url}"
 
-            def normalize_download_failure(result: Any) -> Tuple[Optional[str], bool]:
-                if not isinstance(result, dict):
-                    return None, False
-
-                status_code = result.get('status_code')
-                retryable = result.get('retryable', False)
-                valid_status_code = status_code if isinstance(status_code, int) else None
-                error_detail = (
-                    result.get('error')
-                    or result.get('reason')
-                    or result.get('status')
-                    or result.get('status_code')
-                    or result.get('message')
-                    or result.get('detail')
-                )
-                should_retry = retryable or valid_status_code == 429 or (valid_status_code is not None and valid_status_code >= 500)
-                return error_detail, should_retry
-
             try:
                 url_list = item.get('url_list', [])
                 media_id = item.get('media_id', 'media')
@@ -493,6 +486,13 @@ class DownloadManager:
                                     headers=item_headers,
                                     proxy=item_proxy
                                 )
+                            except aiohttp.ClientResponseError as e:
+                                last_error = build_error_message(url, f"HTTP {e.status} {e.message}")
+                                should_retry = e.status == 429 or e.status >= 500
+                                continue
+                            except NonRetryableMediaError as e:
+                                last_error = build_error_message(url, str(e))
+                                continue
                             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                                 last_error = build_error_message(url, repr(e), is_exception=True)
                                 should_retry = True
@@ -509,12 +509,7 @@ class DownloadManager:
                                     'success': True,
                                     'index': index
                                 }
-
-                            error_detail, retry_current_item = normalize_download_failure(result)
-                            if retry_current_item:
-                                should_retry = True
-
-                            last_error = build_error_message(url, error_detail)
+                            last_error = build_error_message(url)
 
                     if attempt < max_retries and should_retry:
                         delay = retry_delay * (2 ** attempt)

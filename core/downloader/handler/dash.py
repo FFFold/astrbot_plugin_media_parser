@@ -206,7 +206,7 @@ async def download_dash_to_cache(
         if not video_result or not video_result.get("file_path"):
             cleanup_file(video_temp_path)
             cleanup_file(audio_temp_path)
-            return None
+            raise aiohttp.ClientError("DASH video stream download returned no file")
 
         video_file_path = video_result["file_path"]
         audio_file_path = audio_result["file_path"] if audio_result else None

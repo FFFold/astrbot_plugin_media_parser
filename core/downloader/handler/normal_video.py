@@ -134,7 +134,7 @@ async def batch_download_videos(
                         continue
                     if result and result.get('file_path'):
                         return {
-                            'url': url,
+                            'url': url_list[0],
                             'file_path': result.get('file_path'),
                             'size_mb': result.get('size_mb'),
                             'success': True,
