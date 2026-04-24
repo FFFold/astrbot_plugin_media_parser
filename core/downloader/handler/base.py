@@ -13,6 +13,15 @@ from ..validator import validate_media_response
 from ...constants import Config
 
 
+class NonRetryableMediaError(Exception):
+    """表示媒体内容/校验失败，调用方不应将其视为可重试传输错误。"""
+
+    def __init__(self, message: str, media_url: str = None):
+        super().__init__(message)
+        self.media_url = media_url
+        self.retryable = False
+
+
 async def _get_file_size(
     session: aiohttp.ClientSession,
     url: str,
@@ -299,7 +308,7 @@ async def download_media_from_url(
                 response, media_url, is_video=is_video, allow_read_content=True
             )
             if not is_valid:
-                raise aiohttp.ClientError(f"validate_media_response returned False: {media_url}")
+                raise NonRetryableMediaError("validate_media_response returned False", media_url=media_url)
             
             content_type = response.headers.get('Content-Type', '')
             size_mb = extract_size_from_headers(response)
@@ -315,12 +324,9 @@ async def download_media_from_url(
                         pass
                 return os.path.normpath(file_path), size_mb
             cleanup_file(file_path)
-            raise aiohttp.ClientError(f"download_media_stream returned False: {media_url}")
-    except aiohttp.ClientResponseError:
-        raise
-    except (aiohttp.ClientError, asyncio.TimeoutError):
+            raise NonRetryableMediaError("download_media_stream returned False", media_url=media_url)
+    except (aiohttp.ClientResponseError, NonRetryableMediaError, aiohttp.ClientError, asyncio.TimeoutError):
         raise
     except Exception as e:
         logger.warning(f"下载媒体失败: {media_url}, 错误: {e}")
         return None, None
-

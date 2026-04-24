@@ -11,6 +11,7 @@ from .handler.normal_video import download_video_to_cache
 from .handler.range_downloader import download_video_with_range_to_cache
 from .handler.dash import download_dash_to_cache
 from .handler.m3u8 import M3U8Handler
+from .handler.base import NonRetryableMediaError
 
 
 def detect_media_type(url: str) -> Literal['m3u8', 'image', 'video']:
@@ -200,6 +201,15 @@ async def download_media(
             'size_mb': None,
             'error': f"HTTP {e.status} {e.message}",
             'status_code': e.status
+        }
+    except NonRetryableMediaError as e:
+        media_error_url = e.media_url or actual_url
+        logger.debug(f"下载路由非重试失败: {media_error_url[:80]}..., error={e}")
+        return {
+            'file_path': None,
+            'size_mb': None,
+            'error': str(e),
+            'retryable': False
         }
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         logger.debug(f"下载路由传输失败: {actual_url[:80]}..., error={e}")
