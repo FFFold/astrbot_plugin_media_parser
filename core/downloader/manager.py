@@ -457,7 +457,8 @@ class DownloadManager:
                 index = item.get('index', 0)
                 item_headers = item.get('headers', {})
                 item_proxy = item.get('proxy')
-                max_retries = 3
+                # Total attempts including the first download try.
+                max_attempts = 4
                 retry_delay = 1.0
                 first_url = url_list[0] if isinstance(url_list, list) and url_list else None
 
@@ -471,7 +472,7 @@ class DownloadManager:
                     }
 
                 last_error = None
-                for attempt in range(max_retries + 1):
+                for attempt in range(max_attempts):
                     should_retry = False
                     async with semaphore:
                         for url in url_list:
@@ -499,6 +500,7 @@ class DownloadManager:
                                 continue
                             except Exception as e:
                                 last_error = build_error_message(url, repr(e), is_exception=True)
+                                logger.debug(f"候选URL未知异常(不重试): {url}, 错误: {e}")
                                 continue
 
                             if result and result.get('file_path'):
@@ -511,10 +513,10 @@ class DownloadManager:
                                 }
                             last_error = build_error_message(url)
 
-                    if attempt < max_retries and should_retry:
+                    if attempt < max_attempts - 1 and should_retry:
                         delay = retry_delay * (2 ** attempt)
                         logger.debug(
-                            f"媒体项下载重试: {first_url}, 尝试 {attempt + 1}/{max_retries + 1}, "
+                            f"媒体项下载重试: {first_url}, 尝试 {attempt + 1}/{max_attempts}, "
                             f"候选数: {len(url_list)}, 等待 {delay}s"
                         )
                         await asyncio.sleep(delay)
