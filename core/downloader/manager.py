@@ -79,23 +79,16 @@ class DownloadManager:
         proxy = proxy_url if (use_image_proxy and proxy_url) else None
         
         for url in url_list:
-            try:
-                result = await download_media(
-                    session,
-                    url,
-                    media_type=None,
-                    cache_dir=None,
-                    media_id='image',
-                    index=img_idx,
-                    headers=headers,
-                    proxy=proxy
-                )
-            except aiohttp.ClientResponseError as e:
-                logger.debug(f"图片候选URL下载失败: {url}, HTTP {e.status} {e.message}")
-                continue
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                logger.debug(f"图片候选URL下载异常: {url}, 错误: {e}")
-                continue
+            result = await download_media(
+                session,
+                url,
+                media_type=None,
+                cache_dir=None,
+                media_id='image',
+                index=img_idx,
+                headers=headers,
+                proxy=proxy
+            )
             if result and result.get('file_path'):
                 return result.get('file_path')
         
@@ -500,11 +493,11 @@ class DownloadManager:
                                     proxy=item_proxy
                                 )
                             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                                last_error = build_error_message(url, e!r, is_exception=True)
+                                last_error = build_error_message(url, repr(e), is_exception=True)
                                 should_retry = True
                                 continue
                             except Exception as e:
-                                last_error = build_error_message(url, e!r, is_exception=True)
+                                last_error = build_error_message(url, repr(e), is_exception=True)
                                 continue
 
                             if result and result.get('file_path'):
