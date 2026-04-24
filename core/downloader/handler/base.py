@@ -308,6 +308,7 @@ async def download_media_from_url(
                 response, media_url, is_video=is_video, allow_read_content=True
             )
             if not is_valid:
+                logger.debug(f"媒体响应校验失败，标记为非重试错误: {media_url}")
                 raise NonRetryableMediaError("validate_media_response returned False", media_url=media_url)
             
             content_type = response.headers.get('Content-Type', '')
@@ -323,9 +324,12 @@ async def download_media_from_url(
                     except Exception:
                         pass
                 return os.path.normpath(file_path), size_mb
-            cleanup_file(file_path)
+            logger.debug(f"媒体流下载失败，标记为非重试错误: {media_url}")
+            if file_path:
+                cleanup_file(file_path)
             raise NonRetryableMediaError("download_media_stream returned False", media_url=media_url)
-    except (aiohttp.ClientResponseError, NonRetryableMediaError, aiohttp.ClientError, asyncio.TimeoutError):
+    except (aiohttp.ClientResponseError, NonRetryableMediaError, aiohttp.ClientError, asyncio.TimeoutError) as e:
+        logger.debug(f"媒体下载异常透传: {media_url}, 错误: {e!r}")
         raise
     except Exception as e:
         logger.warning(f"下载媒体失败: {media_url}, 错误: {e}")

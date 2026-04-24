@@ -124,7 +124,7 @@ async def batch_download_videos(
                             item_proxy
                         )
                     except aiohttp.ClientResponseError as e:
-                        logger.debug(f"视频候选URL下载失败: {url}, HTTP {e.status} {e.message}")
+                        logger.debug(f"视频候选URL下载失败: {url}, HTTP {e.status} {e}")
                         continue
                     except NonRetryableMediaError as e:
                         logger.debug(f"视频候选URL非重试失败: {url}, 错误: {e}")

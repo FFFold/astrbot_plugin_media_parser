@@ -104,7 +104,7 @@ class DownloadManager:
                     proxy=proxy
                 )
             except aiohttp.ClientResponseError as e:
-                logger.debug(f"图片候选URL下载失败: {url}, HTTP {e.status} {e.message}")
+                logger.debug(f"图片候选URL下载失败: {url}, HTTP {e.status} {e}")
                 continue
             except NonRetryableMediaError as e:
                 logger.debug(f"图片候选URL非重试失败: {url}, 错误: {e}")
@@ -494,7 +494,7 @@ class DownloadManager:
                                     proxy=item_proxy
                                 )
                             except aiohttp.ClientResponseError as e:
-                                last_error = _build_candidate_error_message(url, f"HTTP {e.status} {e.message}")
+                                last_error = _build_candidate_error_message(url, f"HTTP {e.status} {e}")
                                 should_retry = should_retry or e.status == 429 or e.status >= 500
                                 continue
                             except NonRetryableMediaError as e:
