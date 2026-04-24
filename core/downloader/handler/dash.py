@@ -7,7 +7,7 @@ import aiohttp
 
 from ...logger import logger
 from ...storage import cleanup_file, stamp_subdir
-from .base import download_media_from_url
+from .base import download_media_from_url, NonRetryableMediaError
 
 
 async def _download_stream_normal(
@@ -206,7 +206,10 @@ async def download_dash_to_cache(
         if not video_result or not video_result.get("file_path"):
             cleanup_file(video_temp_path)
             cleanup_file(audio_temp_path)
-            raise aiohttp.ClientError("DASH video stream download returned no file")
+            raise NonRetryableMediaError(
+                "DASH video stream download returned no file",
+                media_url=video_url,
+            )
 
         video_file_path = video_result["file_path"]
         audio_file_path = audio_result["file_path"] if audio_result else None
@@ -245,7 +248,7 @@ async def download_dash_to_cache(
             "file_path": os.path.normpath(final_path),
             "size_mb": size_mb
         }
-    except (aiohttp.ClientResponseError, aiohttp.ClientError, asyncio.TimeoutError):
+    except (aiohttp.ClientResponseError, NonRetryableMediaError, aiohttp.ClientError, asyncio.TimeoutError):
         cleanup_file(video_temp_path)
         cleanup_file(audio_temp_path)
         cleanup_file(output_path)
