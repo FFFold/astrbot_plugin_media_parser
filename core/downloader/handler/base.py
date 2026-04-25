@@ -268,6 +268,9 @@ async def download_media_stream(
             
             f.flush()
         return True
+    except (aiohttp.ClientError, asyncio.TimeoutError):
+        cleanup_file(file_path)
+        raise
     except Exception as e:
         logger.warning(f"下载媒体流失败: {file_path}, 错误: {e}")
         cleanup_file(file_path)

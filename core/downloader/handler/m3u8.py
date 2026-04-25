@@ -168,7 +168,7 @@ class M3U8Handler:
         ]
         try:
             results = await asyncio.gather(*tasks)
-        except Exception:
+        except BaseException:
             for task in tasks:
                 if not task.done():
                     task.cancel()
@@ -203,9 +203,23 @@ class M3U8Handler:
                     with open(f, 'rb') as inp:
                         shutil.copyfileobj(inp, out)
             return True
+        except (aiohttp.ClientResponseError, aiohttp.ClientError, asyncio.TimeoutError):
+            raise
         except Exception as e:
             logger.warning(f"合并分片失败: {e}")
             return False
+
+    async def _gather_or_cancel(self, *awaitables):
+        """等待并发任务；任一失败时取消剩余任务，避免清理目录时仍有写入。"""
+        tasks = [asyncio.create_task(awaitable) for awaitable in awaitables]
+        try:
+            return await asyncio.gather(*tasks)
+        except BaseException:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
     async def parse_master_m3u8(
         self,
@@ -294,7 +308,7 @@ class M3U8Handler:
                 self.parse_m3u8(audio_m3u8)
             )
 
-            v_files, a_files = await asyncio.gather(
+            v_files, a_files = await self._gather_or_cancel(
                 self.download_segments(
                     v_segs, os.path.join(temp_dir, "video"), "v"
                 ),
@@ -305,7 +319,7 @@ class M3U8Handler:
 
             video_merged = os.path.join(temp_dir, "video.m4s")
             audio_merged = os.path.join(temp_dir, "audio.m4s")
-            merge_results = await asyncio.gather(
+            merge_results = await self._gather_or_cancel(
                 self.merge_segments(v_init, v_files, video_merged),
                 self.merge_segments(a_init, a_files, audio_merged)
             )

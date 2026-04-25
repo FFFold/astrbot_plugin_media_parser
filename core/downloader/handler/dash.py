@@ -179,21 +179,32 @@ async def download_dash_to_cache(
     audio_result = None
     try:
         if audio_url:
-            video_task = _download_stream(
-                session=session,
-                media_url=video_url,
-                output_path=video_temp_path,
-                headers=headers,
-                proxy=proxy
+            video_task = asyncio.create_task(
+                _download_stream(
+                    session=session,
+                    media_url=video_url,
+                    output_path=video_temp_path,
+                    headers=headers,
+                    proxy=proxy
+                )
             )
-            audio_task = _download_stream(
-                session=session,
-                media_url=audio_url,
-                output_path=audio_temp_path,
-                headers=headers,
-                proxy=proxy
+            audio_task = asyncio.create_task(
+                _download_stream(
+                    session=session,
+                    media_url=audio_url,
+                    output_path=audio_temp_path,
+                    headers=headers,
+                    proxy=proxy
+                )
             )
-            video_result, audio_result = await asyncio.gather(video_task, audio_task)
+            try:
+                video_result, audio_result = await asyncio.gather(video_task, audio_task)
+            except BaseException:
+                for task in (video_task, audio_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(video_task, audio_task, return_exceptions=True)
+                raise
         else:
             video_result = await _download_stream(
                 session=session,
